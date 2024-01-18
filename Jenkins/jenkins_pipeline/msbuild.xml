@@ -1,0 +1,836 @@
+pipeline {
+    agent { label 'Compiler_Machine_76' }
+    options {
+        withFolderProperties()
+    }
+    stages {
+        
+        stage('Applications Information') {
+         steps {
+            script {
+                String[] Env_Array = "${params.ServerConfig_Branches}".split(',');
+                for (x in Env_Array) { bat """echo You Have Selected ServerConfig Branches : ${x}"""}
+                
+                String[] Env_Array2 = "${params.Configurations}".split(',');
+                for (y in Env_Array2) { bat """echo You Have Selected Configurations : ${y}"""}
+                
+                String[] Env_Array3 = "${params.UATEnvironments}".split(',');
+                for (z in Env_Array3) { bat """echo You Have Selected UATEnvironment : ${z}"""}
+                }
+            } 
+        }
+        
+        
+        stage('Cloning Vtrader-Client') {
+            steps {
+                bat """
+                     rmdir /S /Q Vtrader_Client_Git_Checkout & md Vtrader_Client_Git_Checkout & cd Vtrader_Client_Git_Checkout
+                     git clone --depth 1 --branch ${params.tagname} https://${params.gitUser}:${params.gitPAT}@github.com/LogicielServices/LogicielClient.git
+                 """
+            }
+        }
+		
+	stage('Clonning ServerConfig Branches') {
+      steps {
+        script {
+          if ( env.ServerConfig_Branches.isEmpty() ) {
+            echo "ServerConfig_Branches not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Environment}"
+            String[] Env_Array = "${params.ServerConfig_Branches}".split(',');
+            
+            for (x in Env_Array) {
+                bat """
+                    echo "-------------------------${x} "-------------------------"
+                    cd Vtrader_Client_Git_Checkout
+                    dir
+                    md "${x}" & cd "${x}" & git clone --branch ${x} https://${params.gitUser}:${params.gitPAT}@github.com/LogicielServices/ServerConfigs_QA.git & cd ../../ & dir
+                    """
+            }
+          }
+        }
+      }
+    } 	
+    
+    
+    stage('Update ConfigServer on basis of tag') {
+             steps {
+                 
+                 script {
+                  if ( env.ServerConfig_Branches.isEmpty() ) {
+                    echo "ServerConfig_Branches not specified."
+                    //autoCancelled = true
+                    //error('Aborting the build.')
+                  }
+                  else {
+                    //echo "Environment total: ${env.Environment}"
+                    String[] Env_Array = "${params.ServerConfig_Branches}".split(',');
+                    
+                    for (x in Env_Array) {
+                    if ("${x}" == 'UAT') 
+                    powershell '''
+                     $currentVersion = $env:tagname.Substring(1)
+                      Write-Host "Current Tag:-$currentVersion"
+                      
+                          if ($currentVersion -lt "3.0.3.1") {
+                              Write-Host "Replacing ConfigServer value"     
+                              dir Vtrader_Client_Git_Checkout\\UAT\\ServerConfigs_QA\\UAT\\Configs\\AWS_UAT\\Client.dll.config | foreach-object {  
+                                  $wc = [xml](Get-Content $_.fullname)
+                                  $wc.SelectNodes("//add[@key='ConfigServer'][@value=@*]") | Foreach-Object {$_.value = "tcp://18.211.237.35:10016"}
+                                  $wc.Save($_.fullname)  
+                              }
+                          } else {
+                              Write-Host "Tag is greater than v3.0.3.1"
+                          }
+                      
+                    '''
+                    }
+                  }
+                }
+            } 
+        }
+    
+        
+    stage('Nuget Restore') {
+            steps {
+                bat """
+                    echo Restoring Client.csproj
+                    dotnet.exe restore %workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\Client.csproj -r:win-x64
+                 """
+            }
+        }       
+        
+    stage('Building Vtrader Client For Release-Automation') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'Release-Automation') 
+                 {
+                 bat """
+                 "%MsBuildPath%" -t:Publish -p:Configuration=Release-Automation -p:PublishReadyToRun=true -property:SelfContained=true /p:Platform=x64 -p:TargetFramework=net6.0-windows /p:PublishProfile="%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\Properties\\PublishProfiles\\ReleaseAutomationPublishProfile.pubxml"  %workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\Client.csproj
+                 """
+                 }
+              }
+          }
+        }
+      }
+    }    
+    
+    
+     stage('Building Vtrader Client For Release') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                 if ("${x}" == 'Release') 
+                 {
+                 bat """
+                 "%MsBuildPath%" -t:Publish -p:Configuration=Release -p:PublishReadyToRun=true -property:SelfContained=true /p:Platform=x64 -p:TargetFramework=net6.0-windows /p:PublishProfile="%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\Properties\\PublishProfiles\\ReleasePublishProfile.pubxml" %workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\Client.csproj
+                 """
+                 }
+            }
+          }
+        }
+      }
+    }
+    
+    stage('Assembling of Vtrader Client for Release-Automation') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'Release-Automation') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release-Automation\\publish
+                 xcopy %workspace%\\Vtrader_Client_Git_Checkout\\QA\\ServerConfigs_QA\\QA\\Configs\\* %publish% /Y
+                 xcopy %publish%\\Views\\* %publish%\\Profile\\System\\Views /E/H/C/I/Y
+                 xcopy %publish%\\*.xml %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.xaml %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.config %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.txt %publish%\\Profile\\System /I/Y
+                 del %publish%\\*.cs 
+                 del %publish%\\*.pdb
+                 """
+                 }
+              }
+          }
+        }
+      }
+    } 
+    
+    stage('Assembling of Vtrader Client for Release') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'Release') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 xcopy %workspace%\\Vtrader_Client_Git_Checkout\\QA\\ServerConfigs_QA\\QA\\Configs\\* %publish% /Y
+                 xcopy %publish%\\Views\\* %publish%\\Profile\\System\\Views /E/H/C/I/Y
+                 xcopy %publish%\\*.xml %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.xaml %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.config %publish%\\Profile\\System /I/Y
+                 xcopy %publish%\\*.txt %publish%\\Profile\\System /I/Y
+                 del %publish%\\*.cs 
+                 del %publish%\\*.pdb
+                 """
+                 }
+              }
+          }
+        }
+      }
+    } 
+    
+    
+    
+    
+    
+    stage('Signing files for Release-Automation') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'Release-Automation') 
+                 {
+                 bat """ 
+                set SignTool=C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.18362.0\\x64\\SignTool.exe
+                set Certificates=C:\\Users\\admin\\Desktop\\Certificates\\LogicielServicesLLC\\Logiciel Services
+                set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release-Automation\\publish
+                
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\ReportExporter.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\HttpClientWrapper.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.UI.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.UC.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Providers.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.MktLibBO.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.LibBO.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Global.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Communication.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.GRPC.Communication.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Profile.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.exe"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Services.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Shared.WPF.dll"                
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.dlllll"                
+                cd %publish%
+                dir
+                "%ZipPath%"\\7z a %QA_DeploymentPath%\\VTrader-QA-%tagname%-Release-Automation.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                """
+                 }
+              }
+          }
+        }
+      }
+    } 
+    
+    stage('Signing files for Release') {
+      steps {
+        script {
+          if ( env.Configurations.isEmpty() ) {
+            echo "Configurations not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.Configurations}"
+            String[] Env_Array = "${params.Configurations}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'Release') 
+                 {
+                 bat """ 
+                set SignTool=C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.18362.0\\x64\\SignTool.exe
+                set Certificates=C:\\Users\\admin\\Desktop\\Certificates\\LogicielServicesLLC\\Logiciel Services
+                set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\ReportExporter.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\HttpClientWrapper.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.UI.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.UC.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Providers.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.MktLibBO.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.LibBO.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Global.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Communication.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.GRPC.Communication.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Profile.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.exe"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.Services.dll"
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Shared.WPF.dll"                
+                "%SignTool%" sign /f "%Certificates%\\LogicielServicesLLC.pfx" /p Logi@123 /tr http://timestamp.sectigo.com /td SHA256 %publish%\\Client.dlllll"                   
+                cd %publish%
+                dir
+                "%ZipPath%"\\7z a %QA_DeploymentPath%\\VTrader-QA-%tagname%-Release.zip *
+                @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                """
+                 }
+              }
+          }
+        }
+      }
+    } 
+    
+    
+    stage('Creating UAT Packages') {
+      steps {
+        script {
+          if ( env.UATEnvironments.isEmpty() ) {
+            echo "UATEnvironments not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.UATEnvironments}"
+            String[] Env_Array = "${params.UATEnvironments}".split(',');
+            
+            for (x in Env_Array) {
+                if ("${x}" == 'UAT') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\UAT\\ServerConfigs_QA\\UAT\\Configs\\UAT
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %UAT_DeploymentPath%\\VTrader-UAT-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 }
+                 if ("${x}" == 'AWS-UAT') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\UAT\\ServerConfigs_QA\\UAT\\Configs\\AWS_UAT
+                 set basePath="C:\\Automation\\LogicielClient"
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %basePath%\\AWS-UAT\\VTrader-AWS-UAT-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 }
+              }
+          }
+        }
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    stage('Creating Other Packages') {
+      steps {
+        script {
+          if ( env.OtherEnvironments.isEmpty() ) {
+            echo "OtherEnvironments not specified."
+            //autoCancelled = true
+            //error('Aborting the build.')
+          }
+          else {
+            //echo "Environment total: ${env.OtherEnvironments}"
+            String[] Env_Array = "${params.OtherEnvironments}".split(',');
+            
+            for (x in Env_Array) {
+                
+                if ("${x}" == 'DEMO') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\DEMO\\ServerConfigs_QA\\DEMO\\Configs\\DEMO
+                 set basePath="C:\\Automation\\LogicielClient"
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %basePath%\\DEMO\\VTrader-DEMO-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 } 
+                 
+                if ("${x}" == 'CERT') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\CERT\\ServerConfigs_QA\\CERT\\Configs\\CERT
+                 set basePath="C:\\Automation\\LogicielClient"
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %basePath%\\CERT\\VTrader-CERT-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 } 
+                 
+                 if ("${x}" == 'PRODREPLICA') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\PRODREPLICA\\ServerConfigs_QA\\PRODREPLICA\\Configs\\PRODREPLICA
+                 set basePath="C:\\Automation\\LogicielClient"
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %basePath%\\PRODREPLICA\\VTrader-PRODREPLICA-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 }
+                if ("${x}" == 'CERT_GATO') 
+                 {
+                 bat """
+                 set publish=%workspace%\\Vtrader_Client_Git_Checkout\\LogicielClient\\Client\\bin\\Release\\publish
+                 set serverconfigs=%workspace%\\Vtrader_Client_Git_Checkout\\CERT\\ServerConfigs_QA\\CERT\\Configs\\CERT
+                 set GATO_FILE=%workspace%\\Vtrader_Client_Git_Checkout\\CERT\\ServerConfigs_QA\\CERT\\GATO
+                 set basePath="C:\\Automation\\LogicielClient"
+                 xcopy "%serverconfigs%\\*" "%publish%" /Y
+                 xcopy "%serverconfigs%\\*"  "%publish%\\Profile\\System" /I/Y
+                 xcopy "%GATO_FILE%\\*" "%publish%\\Views" /Y
+                 cd %publish%
+                 dir
+                "%ZipPath%"\\7z a %basePath%\\CERT\\VTrader-CERT_GATO-%tagname%.zip *
+                 @echo off
+                 echo ---Client.exe Version--- & Powershell.exe -Command "(Get-Command %publish%\\Client.exe).FileVersionInfo.FileVersion" & echo -------------------
+                 """
+                 }                 
+              }
+          }
+        }
+      }
+    }
+    
+    
+    stage('S3 upload') {
+            steps{  
+                script{
+                    if ( env.uploadtos3.isEmpty() ) {
+                         echo "S3 upload not selected."
+                        }
+                        else {
+                         //echo "Environment total: ${env.Environment}"
+                         String[] Env_Array = "${params.uploadtos3}".split(',');
+                         
+                         for (x in Env_Array) {
+                             if ("${x}" == 'QA_Release-Automation') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "%QA_DeploymentPath%\\VTrader-QA-%tagname%-Release-Automation.zip" s3://vtrader/QA/Standalone/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key QA/Standalone/VTrader-QA-%tagname%-Release-Automation.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/QA/Standalone/VTrader-QA-%tagname%-Release-Automation.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/QA/Standalone/VTrader-QA-${env.tagname}-Release-Automation.zip"
+                             emailext (
+                               subject: "VTrader Desktop Client QA Release Created '${env.JOB_NAME}'",
+                               body: """
+                                   <html>
+                                     <head>
+                                       <style>
+                                         body {
+                                           background-color: #F0FFFF;
+                                           font-family: Arial, sans-serif
+                                         }
+                                         h1 {
+                                           color: #FF
+                                         }
+                                       </style>
+                                     </head>
+                                     <body>
+                                       <h1>VTrader Client Release</h1>
+                                       <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                         <br>Link: ${LinktoRelease} <br>
+                                         <br>
+                                         <br>
+                                         <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                       </p>
+                                     </body>
+                                   </html>                
+                               """,
+                               to: "$EmailVAR",
+                               from: 'logiciel.subscriptions@logicielservice.com',
+                               recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        if ("${x}" == 'QA_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "%QA_DeploymentPath%\\VTrader-QA-%tagname%-Release.zip" s3://vtrader/QA/Standalone/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key QA/Standalone/VTrader-QA-%tagname%-Release.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/QA/Standalone/VTrader-QA-%tagname%-Release.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/QA/Standalone/VTrader-QA-${env.tagname}-Release.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client QA Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        if ("${x}" == 'UAT_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "%UAT_DeploymentPath%\\VTrader-UAT-%tagname%.zip" s3://vtrader/uat/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key uat/standalones/VTrader-UAT-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/uat/standalones/VTrader-UAT-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/uat/standalones/VTrader-UAT-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client UAT Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        if ("${x}" == 'AWS-UAT_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "C:\\Automation\\LogicielClient\\AWS-UAT\\VTrader-AWS-UAT-%tagname%.zip" s3://vtrader/uat/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key uat/standalones/VTrader-AWS-UAT-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/uat/standalones/VTrader-AWS-UAT-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/uat/standalones/VTrader-AWS-UAT-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client AWS-UAT Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        
+                        if ("${x}" == 'DEMO_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "C:\\Automation\\LogicielClient\\DEMO\\VTrader-DEMO-%tagname%.zip" s3://vtrader/demo/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key demo/standalones/VTrader-DEMO-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/demo/standalones/VTrader-DEMO-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/demo/standalones/VTrader-DEMO-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client DEMO Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        
+                        if ("${x}" == 'CERT_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "C:\\Automation\\LogicielClient\\CERT\\VTrader-CERT-%tagname%.zip" s3://vtrader/Cert/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key Cert/standalones/VTrader-CERT-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/Cert/standalones/VTrader-CERT-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/Cert/standalones/VTrader-CERT-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client CERT Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        
+                        
+                        if ("${x}" == 'PRODREPLICA_Release') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "C:\\Automation\\LogicielClient\\PRODREPLICA\\VTrader-PRODREPLICA-%tagname%.zip" s3://vtrader/uat/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key uat/standalones/VTrader-PRODREPLICA-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/uat/standalones/VTrader-PRODREPLICA-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/Cert/standalones/VTrader-PRODREPLICA-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client PRODREPLICA Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }
+                        if ("${x}" == 'CERT_GATO') 
+                              {
+                         withCredentials([[
+                                 $class: 'AmazonWebServicesCredentialsBinding',
+                                 credentialsId: "S3-Upload",
+                                 accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                 secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                             ]]) {
+                             bat 'aws s3 cp "C:\\Automation\\LogicielClient\\CERT\\VTrader-CERT_GATO-%tagname%.zip" s3://vtrader/Cert/standalones/'
+                             bat 'aws s3api put-object-acl --bucket vtrader --key Cert/standalones/VTrader-CERT_GATO-%tagname%.zip --acl public-read'
+                             bat 'echo "https://vtrader.s3.us-east-2.amazonaws.com/Cert/standalones/VTrader-CERT_GATO-%tagname%.zip"'
+                             }
+                             def LinktoRelease= "https://vtrader.s3.us-east-2.amazonaws.com/Cert/standalones/VTrader-CERT_GATO-${env.tagname}.zip"
+                              emailext (
+                                subject: "VTrader Desktop Client CERT_GATO Release Created '${env.JOB_NAME}'",
+                                body: """
+                                    <html>
+                                      <head>
+                                        <style>
+                                          body {
+                                            background-color: #F0FFFF;
+                                            font-family: Arial, sans-serif
+                                          }
+                                          h1 {
+                                            color: #FF
+                                          }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>VTrader Client Release</h1>
+                                        <p>The requested version of VTrader Client Release has been created. Please find the link below: <br>
+                                          <br>Link: ${LinktoRelease} <br>
+                                          <br>
+                                          <br>
+                                          <br>Thanks & Regards, <br>DevOps <br>Logiciel Services
+                                        </p>
+                                      </body>
+                                    </html>                
+                                """,
+                                to: "$EmailVAR",
+                                from: 'logiciel.subscriptions@logicielservice.com',
+                                recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                        }  
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    }
+}

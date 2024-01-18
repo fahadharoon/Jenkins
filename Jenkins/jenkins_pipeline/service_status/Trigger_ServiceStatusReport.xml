@@ -1,0 +1,452 @@
+pipeline {
+    agent { label 'NY4_APP02_Backup' }
+
+    stages {
+        
+           stage('Delete Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+        
+    stage('Trigger Job') {
+          steps {
+            script {
+              if ( env.Environments.isEmpty() ) {
+                echo "Environments not specified."
+                //autoCancelled = true
+                //error('Aborting the build.')
+              }
+              else {
+                //echo "Environment total: ${env.Environment}"
+                String[] Env_Array = "${params.Environments}".split(',');
+                 def myjob=build job: 'Product-Support/Services_Status/Services_Status' , propagate: true, wait: true
+           
+                     
+                }
+              }
+            }
+          }
+       
+
+    stage('Download Html Files') {
+          steps {
+            script {
+              if ( env.Environments.isEmpty() ) {
+                echo "Environments not specified."
+                //autoCancelled = true
+                //error('Aborting the build.')
+              }
+              else {
+                //echo "Environment total: ${env.Environment}"
+                String[] Env_Array = "${params.Environments}".split(',');
+                
+                for (x in Env_Array) {
+                    copyArtifacts excludes: '', 
+                    fingerprintArtifacts: true, 
+                    projectName: "/Product-Support/Services_Status/Services_Status/label=${x}", 
+                    selector: lastSuccessful(), 
+                    target: ''
+                     
+                }
+                
+        
+              }
+            }
+          }
+    } 
+    
+    
+            
+    stage('Consolidated file') {
+          steps {
+            script {
+                bat '''
+                
+                 type APP01.html APP02.html APP03.html APP04.html APP05.html DB01.html DB02.html DB03.html Frankfurt.html Frankfurt_Ignite.html OPUS.html OPUSDB.html PRF01.html PRF02.html PRF03.html Sao_Paulo.html Sao_Paulo_Ignite.html Street_Trader_Bahamas.html Street_Trader_QueryIgnite.html NY-FIX.html > consolidated.html
+               rem type *.html > consolidated.html
+                '''
+              
+                }
+                
+        
+              }
+            }        
+            
+
+       stage('Services Count') {
+          steps {
+            script {
+                powershell '''
+                
+               $htmlFile = "consolidated.html"
+                # Read the content of the HTML file
+                $htmlContent = Get-Content $htmlFile -Raw
+                
+                # Count running and stopped services
+                $runningCount = ($htmlContent -split 'Running').Count - 1
+                $stoppedCount = ($htmlContent -split 'Stopped').Count - 1
+                
+                # Generate HTML content based on counts
+                $newHtmlContent = @"
+                <!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Services Summary Report</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .flex-container {
+            display: inline;
+            justify-content: left;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .mainBox {
+            width: 80%;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .mainheading {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-bottom: 2px solid #6096BA;
+        }
+
+        .whitebox {
+            padding: 1px;
+        }
+
+        table {
+            width: 70%;
+            border-collapse: collapse;
+            margin-top: 0px;
+        }
+
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: center;
+            padding: 2px;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            color: #333333;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #e6e6e6;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-top: 2px solid #6096BA;
+        }
+        td.green {
+            	background-color: lightgreen;
+                }
+        
+                td.red {
+                    background-color: #FF7F7F;
+                }
+    </style>
+</head>
+
+<body>
+<div class="flexdiv">
+				<div class = "mainBox">
+				<h2 class= "mainheading">Services Summary Report<hr></h2>
+				<div class = "whitebox">
+    <table class = "tableEquity">
+    
+        <tr>
+            <th style="background-color:#EEEEEE; color:Black; width:30%; height:20px">Status</th>
+            <th style="background-color:#EEEEEE; color:Black; width:30%; height:20px">Count</th>
+        </tr>
+        <tr>
+            <td>Running</td>
+            <td class='green'>$runningCount</td>
+        </tr>
+        <tr>
+            <td>Stopped</td>
+            <td class='red'>$stoppedCount</td>
+        </tr>
+    </table>
+    <div/>
+</div>
+    </div>
+</div>
+</body>
+
+</html>
+
+"@
+                
+                # Save the new HTML content to a file
+                Set-Content -Path "services_count.html" -Value $newHtmlContent
+                
+                Write-Host "New HTML file created: new_output.html"
+                
+                '''
+                
+           
+
+                }
+                
+        
+              }
+            }
+            
+        
+      stage('Stopped Services') {
+    steps {
+        script {
+            powershell '''
+                $htmlFilePath = "consolidated.html"
+
+                # Read HTML content from the file
+$htmlContent = Get-Content -Path $htmlFilePath -Raw
+
+# Define regular expressions for finding tables and rows
+$tableRegex = '<table[^>]*>.*?</table>'
+$rowRegex = '<tr[^>]*>.*?</tr>'
+
+# Find all tables in the HTML
+$tableMatches = [regex]::Matches($htmlContent, $tableRegex, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+# Create an array to store filtered rows
+$filteredRows = @()
+
+# Iterate over each table match
+foreach ($tableMatch in $tableMatches) {
+    # Get the table content
+    $tableContent = $tableMatch.Value
+
+    # Find all rows in the table
+    $rowMatches = [regex]::Matches($tableContent, $rowRegex, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+    # Iterate over each row match starting from the second row
+    for ($i = 1; $i -lt $rowMatches.Count; $i++) {
+        # Get the row content
+        $rowContent = $rowMatches[$i].Value
+
+        # Check if the row contains "Stopped" in the status column
+        if ($rowContent -match '<td[^>]*>\\s*Stopped\\s*</td>') {
+            $filteredRows += $rowContent
+        }
+    }
+}
+
+# Create HTML content for the filtered rows with improved styling
+$htmlOutput = @"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .flex-container {
+            display: inline;
+            justify-content: left;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .mainBox {
+            width: 80%;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .mainheading {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-bottom: 2px solid #6096BA;
+        }
+
+        .whitebox {
+            padding: 1px;
+        }
+
+        table {
+            width: 70%;
+            border-collapse: collapse;
+            margin-top: 0px;
+        }
+
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: center;
+            padding: 2px;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            color: #333333;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #e6e6e6;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-top: 2px solid #6096BA;
+        }
+        td.green {
+        background-color: lightgreen;
+        }
+        
+        td.red {
+        background-color: #FF7F7F;
+                }
+    </style>
+</head>
+
+<body>
+
+<div class="flexdiv">
+				<div class = "mainBox">
+				<div class = "whitebox">
+    
+   <table class = "tableEquity">
+     <tr>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Environment</th>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Display Name</th>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Description</th>
+			<th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Status</th>
+    </tr>
+        $($filteredRows -join '')
+    </table>
+    </div>
+    </div>
+</div>
+
+
+</body>
+
+</html>
+"@
+                # Save the HTML content to a new file
+                $htmlOutput | Out-File -FilePath "Stopped_Services.html" -Encoding UTF8
+            '''
+        }
+    }
+}
+
+    
+            
+            
+            
+        stage('Consolidated report file') {
+          steps {
+            script {
+                bat '''
+                
+                 type  services_count.html Stopped_Services.html consolidated.html  > consolidated_report.html
+                 
+        
+
+
+
+                '''
+              
+                }
+                
+        
+              }
+            }     
+            
+          
+            
+            
+ 
+        
+        
+        stage('Email')    {
+                    steps {
+                    script {
+                    emailext (
+                        
+                        
+                        mimeType: 'text/html',
+                        attachLog: true,
+                        subject: "Services Status Report'${env.JOB_NAME}'",
+                        body: readFile("${env.WORKSPACE}/consolidated_report.html"),
+                        to: "devops@logicielservice.com,notification@logicielservice.com",
+                        from: 'logiciel.subscriptions@logicielservice.com',
+                        recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                    }
+                    }                
+                
+                }
+        
+        
+   
+    
+      stage('Publish Html Files') {
+          steps {
+            script {
+           
+           publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '', reportFiles: '*.html', reportName: 'HTML Report', reportTitles: '', useWrapperFileDirectly: true])
+                  
+                }
+                
+        
+              }
+            }
+        
+    }
+}

@@ -1,0 +1,212 @@
+# Retrieve the concatenated value from the environment variable
+$BASE_PATHS = [Environment]::GetEnvironmentVariable("CONCATENATED_VALUE", "Machine")
+
+# Check if the value is not null or empty
+if (-not [string]::IsNullOrWhiteSpace($BASE_PATHS)) {
+    # Split the value into an array using commas as the delimiter
+    $BASE_PATHS = $BASE_PATHS -split ','
+
+    # Trim whitespace from each element in the array and enclose in double quotes
+    $BASE_PATHS = $BASE_PATHS | ForEach-Object { "`"$_`"" }
+
+    # Join the elements into a single string with ', ' as the separator
+    $formattedString = $BASE_PATHS -join ', '
+
+    Write-Host "The concatenated value for ${env:label} is: $formattedString"
+  
+  
+  Write-Host "$formattedString"
+
+    # Save the formatted string into a variable
+    $formattedStringVariable = $formattedString
+} else {
+    Write-Host "The concatenated value for ${env:label} is null or empty."
+    $formattedStringVariable = $null
+}
+
+# Use $formattedStringVariable as needed in the rest of your script
+
+
+
+# Get services with their descriptions
+#$keywords = @("Apache", "OMSServer")
+#$services = Get-Service | ForEach-Object {
+#    $service = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.ServiceName)"
+#    [PSCustomObject]@{
+#        DisplayName = $_.DisplayName
+#        Description = $service.Description
+#        Status = $_.Status
+#    }
+#}
+
+$services = Get-Service | ForEach-Object {
+    $serviceInfo = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.ServiceName)"
+
+    $description = if ($serviceInfo.PSObject.Properties.Name -contains 'Description') {
+        $serviceInfo.Description
+    } else {
+        $_.DisplayName
+    }
+
+    [PSCustomObject]@{
+        DisplayName = $_.DisplayName
+        Description = $description
+        Status = $_.Status
+    }
+}
+
+# Filter services containing "Apache" in the description
+$filteredServices = $services | Where-Object { $_.Description -like '*Apache*' -or $_.description -like "*OMSServer*" -or $_.description -like "*vtrader*" -or $_.description -like "*das-*" -or $_.description -like "*fix *" -or $_.description -like "*fix-*" -or $_.description -like "*FIXVC*" -or $_.description -like "*das*" -or $_.description -like "*OEx64VC14-VITA*" -or $_.description -like "*OrderExecServer Service*"  -or $_.description -like "*OrderExec Server Service*" -or $_.description -like "*Logiciel *" -or $_.description -like "*OMSConfigurator*" -or $_.description -like "*ACTReportingServer*" -or $_.description -like "*AuditTrailUpdateServer-Frankfurt*" -or $_.description -like "*FIXVC14-Outbound*" -or $_.description -like "*vTraderEngineVC17*" }
+
+# Names to exclude from the output
+$namesToExclude = @($formattedString)
+
+# Exclude specific rows based on names
+
+# Names to exclude from the output
+$namesToExclude = $formattedString
+
+# Exclude specific rows based on names
+
+$filteredServices = $filteredServices | Where-Object { $formattedString -notlike "*$($_.DisplayName)*" }
+
+$filteredServices = $filteredServices | Where-Object { ($formattedString -notlike "*$($_.DisplayName)*") -and ($_.DisplayName -ne "UpdateServer_CorpAct") -and ($_.DisplayName -ne "UpdateServerCORPACT") -and ($_.DisplayName -ne "OMSServer64") -and ($_.DisplayName -ne "OMSServer64-BANFF") -and ($_.DisplayName -ne "OMSServer64-ONT") -and ($_.DisplayName -ne "FIXVC14-APP01") -and ($_.DisplayName -ne "FIXVC14-Outbound01" ) }
+
+
+
+
+
+
+
+
+# HTML header
+$htmlHeader = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .flex-container {
+            display: inline;
+            justify-content: left;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .mainBox {
+            width: 80%;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .mainheading {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-bottom: 2px solid #6096BA;
+        }
+
+        .whitebox {
+            padding: 1px;
+        }
+
+        table {
+            width: 70%;
+            border-collapse: collapse;
+            margin-top: 0px;
+        }
+
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: center;
+            padding: 2px;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            color: #333333;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #e6e6e6;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            padding: 2px 0;
+            border-top: 2px solid #6096BA;
+        }
+    </style>
+</head>
+<body>
+  <div class="flexdiv">
+  	<div class = "mainBox">
+	<h2 class= "mainheading">${env:label} (Service Status Report)<hr></h2>
+	<div class = "whitebox">
+    <table class = "tableEquity">
+         <tr>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Environment</th>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Display Name</th>
+            <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Description</th>
+			<th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Status</th>
+    </tr>
+"@
+
+# HTML footer
+$htmlFooter = @"
+    </table>
+</div>
+    </div>
+</div>
+
+</body>
+</html>
+"@
+
+# Generate HTML content for each service with color coding
+$htmlServices = $filteredServices | ForEach-Object {
+    $displayName = $_.DisplayName
+    $description = $_.Description
+    $status = $_.Status
+
+    # Check for null or empty description
+    if ([string]::IsNullOrWhiteSpace($description)) {
+        $description = "N/A"
+    }
+
+    # Determine the class for styling based on the service status
+    $statusClass = if ($status -eq 'Running') { 'green' } else { 'red' }
+
+    "<tr><td><b>${env:label}</b></td><td>$displayName</td><td>$description</td><td class='$statusClass'>$status</td></tr>"
+  
+
+}
+
+# Combine HTML header, service content, and footer
+$htmlContent = $htmlHeader + ($htmlServices -join "`n") + $htmlFooter
+
+# Save the HTML content to a file
+$htmlContent | Out-File -FilePath "${env:label}.html" -Encoding UTF8
+
+
+Write-Host "HTML report created: ${env:label}.html"

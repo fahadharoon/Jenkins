@@ -1,0 +1,716 @@
+pipeline {
+    agent { label 'NY4_APP02_Backup' }
+
+    stages {
+        
+           stage('Delete Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+        
+    stage('Trigger Job') {
+          steps {
+            script {
+              if ( env.Environments.isEmpty() ) {
+                echo "Environments not specified."
+                //autoCancelled = true
+                //error('Aborting the build.')
+              }
+              else {
+                //echo "Environment total: ${env.Environment}"
+                String[] Env_Array = "${params.Environments}".split(',');
+                 def myjob=build job: 'Deployed_Version_Report/FIXHUB-Version-Report/FIXHUB_NEW/FIXHUB_Version_Report_NewApproach' , propagate: true, wait: true
+           
+                     
+                }
+              }
+            }
+          }
+       
+
+    stage('Download Html Files') {
+          steps {
+            script {
+              if ( env.Environments.isEmpty() ) {
+                echo "Environments not specified."
+                //autoCancelled = true
+                //error('Aborting the build.')
+              }
+              else {
+                //echo "Environment total: ${env.Environment}"
+                String[] Env_Array = "${params.Environments}".split(',');
+                
+                for (x in Env_Array) {
+                    copyArtifacts excludes: '', 
+                    fingerprintArtifacts: true, 
+                    projectName: "/Deployed_Version_Report/FIXHUB-Version-Report/FIXHUB_NEW/FIXHUB_Version_Report_NewApproach/label=${x}", 
+                    selector: lastSuccessful(), 
+                    target: ''
+                     
+                }
+                
+        
+              }
+            }
+          }
+    } 
+    
+    stage('Make it unique') {
+          steps {
+            script {
+                powershell '''
+                
+                # Define the directory where your text files are located
+                $directoryPath = "${env:workspace}"
+                
+                # Get a list of all .txt files in the directory
+                $txtFiles = Get-ChildItem -Path $directoryPath -Filter *.txt
+                
+                # Iterate through each text file in the directory
+                foreach ($txtFile in $txtFiles) {
+                    $content = Get-Content -Path $txtFile.FullName
+                    $modifiedContent = @()
+                    $count = 1
+                    $varNames = @{}
+                    
+                    # Get the base name of the file (without extension)
+                    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($txtFile.Name)
+                
+                    # Iterate through the lines and add the count to the variable names
+                    foreach ($line in $content) {
+                        $line = $line.Trim()
+                        if ($line -match "^\\s*(\\w+)\\s*:\\s*(.+)") {
+                            $varName = $Matches[1]
+                            $varValue = $Matches[2]
+                
+                            if (-not $varNames.ContainsKey($varName)) {
+                                $varNames[$varName] = 1
+                            } else {
+                                $varNames[$varName]++
+                            }
+                
+                            # Concatenate the variable name with the file name and count
+                            $modifiedVarName = "$varName$($varNames[$varName])-$fileName"
+                            $modifiedContent += "$modifiedVarName : $varValue"
+                        } else {
+                            $modifiedContent += $line
+                        }
+                    }
+                
+                    # Write the modified content back to the same file
+                    $modifiedContent | Set-Content -Path $txtFile.FullName
+                    Write-Host "Counts added to variable names in $($txtFile.Name)."
+                }
+                
+                '''
+                
+           
+
+                }
+                
+        
+              }
+            }
+            
+    stage('Consolidated file') {
+          steps {
+            script {
+                bat '''
+                
+                type NY-FIX.txt NY4_NY-FIX_Backup.txt AWS_NYFIX01_Backup.txt FIX_Victory.txt Frankfurt.txt OPUS.txt Sao_Paulo.txt Sofi_Prod_NV.txt Street_Trader_Bahamas.txt NY4_NY-FIX_Backup.txt AWS_NYFIX01_Backup.txt > consolidated.txt
+                powershell -Command "(Get-Content -Path 'consolidated.txt') | Where-Object { $_ -notmatch 'FIXEngine.exe' } | Out-File -FilePath 'consolidated.txt'"
+                powershell -Command "(Get-Content -Path 'consolidated.txt') | Where-Object { $_ -notmatch 'ProductVersion' } | Out-File -FilePath 'consolidated.txt'"
+                
+                '''
+                
+           
+
+                }
+                
+        
+              }
+            }        
+								   
+            
+            
+     stage('Extract variables') {
+          steps {
+            script {
+                powershell '''
+                
+                $inputFilePath = "${env:workspace}\\consolidated.txt"
+
+                # Read the content from the input file
+                $content = Get-Content -Path $inputFilePath
+                
+                # Create a hashtable to store variable names and values
+                $variables = @{}
+                
+                # Iterate through the lines and extract variable names and values
+                foreach ($line in $content) {
+                    $match = $line -match '^(.+?)\\s*:\\s*(.+)$'
+                    if ($match) {
+                        $varName = $matches[1].Trim()
+                        $varValue = $matches[2].Trim()
+                
+                        # Add the variable name and value to the hashtable
+                        $variables[$varName] = $varValue
+                    }
+                }
+                
+                # Access variables using their names
+                $nyfix01version1 = $variables["Version1-NY-FIX"]
+                $nyfix01date1 = $variables["LastWriteTime1-NY-FIX"]
+                $nyfix01folder1 = $variables["Folder1-NY-FIX"]
+                
+                
+                
+                $nyfix01version2 = $variables["Version2-NY-FIX"]
+                $nyfix01date2 = $variables["LastWriteTime2-NY-FIX"]
+                $nyfix01folder2 = $variables["Folder2-NY-FIX"]
+                
+                
+                $nyfix01version3 = $variables["Version3-NY-FIX"]
+                $nyfix01date3 = $variables["LastWriteTime3-NY-FIX"]
+                $nyfix01folder3 = $variables["Folder3-NY-FIX"]
+                
+                
+                
+                $nyfix01version4 = $variables["Version4-NY-FIX"]
+                $nyfix01date4 = $variables["LastWriteTime4-NY-FIX"]
+                $nyfix01folder4 = $variables["Folder4-NY-FIX"]
+                
+                
+                $nyfix01version5 = $variables["Version5-NY-FIX"]
+                $nyfix01date5 = $variables["LastWriteTime5-NY-FIX"]
+                $nyfix01folder5 = $variables["Folder5-NY-FIX"]
+                
+                
+                $nyfix01version6 = $variables["Version6-NY-FIX"]
+                $nyfix01date6 = $variables["LastWriteTime6-NY-FIX"]
+                $nyfix01folder6 = $variables["Folder6-NY-FIX"]
+                
+                
+                $nyfix01version7 = $variables["Version7-NY-FIX"]
+                $nyfix01date7 = $variables["LastWriteTime7-NY-FIX"]
+                $nyfix01folder7 = $variables["Folder7-NY-FIX"]
+                
+                
+                $nyfix01version8 = $variables["Version8-NY-FIX"]
+                $nyfix01date8 = $variables["LastWriteTime8-NY-FIX"]
+                $nyfix01folder8 = $variables["Folder8-NY-FIX"]
+                
+                
+                $nyfix01version9 = $variables["Version9-NY-FIX"]
+                $nyfix01date9 = $variables["LastWriteTime9-NY-FIX"]
+                $nyfix01folder9 = $variables["Folder9-NY-FIX"]
+                
+                
+                $nyfix01version10 = $variables["Version10-NY-FIX"]
+                $nyfix01date10 = $variables["LastWriteTime10-NY-FIX"]
+                $nyfix01folder10 = $variables["Folder10-NY-FIX"]
+                
+                
+                $nyfix01version11 = $variables["Version11-NY-FIX"]
+                $nyfix01date11 = $variables["LastWriteTime11-NY-FIX"]
+                $nyfix01folder11 = $variables["Folder11-NY-FIX"]
+                
+                
+                $nyfix01version12 = $variables["Version12-NY-FIX"]
+                $nyfix01date12 = $variables["LastWriteTime12-NY-FIX"]
+                $nyfix01folder12 = $variables["Folder12-NY-FIX"]
+                
+                
+                $nyfix01version13 = $variables["Version13-NY-FIX"]
+                $nyfix01date13 = $variables["LastWriteTime13-NY-FIX"]
+                $nyfix01folder13 = $variables["Folder13-NY-FIX"]
+                
+                $nyfix01version14 = $variables["Version14-NY-FIX"]
+                $nyfix01date14 = $variables["LastWriteTime14-NY-FIX"]
+                $nyfix01folder14 = $variables["Folder14-NY-FIX"]
+                
+                
+                $nyfix01backupversion1 = $variables["Version1-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate1 = $variables["LastWriteTime1-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder1 = $variables["Folder1-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion2 = $variables["Version2-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate2 = $variables["LastWriteTime2-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder2 = $variables["Folder2-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion3 = $variables["Version3-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate3 = $variables["LastWriteTime3-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder3 = $variables["Folder3-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion4 = $variables["Version4-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate4 = $variables["LastWriteTime4-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder4 = $variables["Folder4-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion5 = $variables["Version5-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate5 = $variables["LastWriteTime5-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder5 = $variables["Folder5-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion6 = $variables["Version6-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate6 = $variables["LastWriteTime6-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder6 = $variables["Folder6-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion7 = $variables["Version7-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate7 = $variables["LastWriteTime7-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder7 = $variables["Folder7-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion8 = $variables["Version8-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate8 = $variables["LastWriteTime8-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder8 = $variables["Folder8-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion9 = $variables["Version9-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate9 = $variables["LastWriteTime9-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder9 = $variables["Folder9-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion10 = $variables["Version10-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate10 = $variables["LastWriteTime10-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder10 = $variables["Folder10-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion11 = $variables["Version11-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate11 = $variables["LastWriteTime11-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder11 = $variables["Folder11-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion12 = $variables["Version12-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate12 = $variables["LastWriteTime12-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder12 = $variables["Folder12-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01backupversion13 = $variables["Version13-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate13 = $variables["LastWriteTime13-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder13 = $variables["Folder13-NY4_NY-FIX_Backup"]
+                
+                $nyfix01backupversion14 = $variables["Version14-NY4_NY-FIX_Backup"]
+                $nyfix01backupdate14 = $variables["LastWriteTime14-NY4_NY-FIX_Backup"]
+                $nyfix01backupfolder14 = $variables["Folder14-NY4_NY-FIX_Backup"]
+                
+                
+                $nyfix01drversion1 = $variables["Version1-AWS_NYFIX01_Backup"]
+                $nyfix01drdate1 = $variables["LastWriteTime1-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder1 = $variables["Folder1-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion2 = $variables["Version2-AWS_NYFIX01_Backup"]
+                $nyfix01drdate2 = $variables["LastWriteTime2-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder2 = $variables["Folder2-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion3 = $variables["Version3-AWS_NYFIX01_Backup"]
+                $nyfix01drdate3 = $variables["LastWriteTime3-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder3 = $variables["Folder3-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion4 = $variables["Version4-AWS_NYFIX01_Backup"]
+                $nyfix01drdate4 = $variables["LastWriteTime4-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder4 = $variables["Folder4-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion5 = $variables["Version5-AWS_NYFIX01_Backup"]
+                $nyfix01drdate5 = $variables["LastWriteTime5-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder5 = $variables["Folder5-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion6 = $variables["Version6-AWS_NYFIX01_Backup"]
+                $nyfix01drdate6 = $variables["LastWriteTime6-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder6 = $variables["Folder6-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion7 = $variables["Version7-AWS_NYFIX01_Backup"]
+                $nyfix01drdate7 = $variables["LastWriteTime7-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder7 = $variables["Folder7-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion8 = $variables["Version8-AWS_NYFIX01_Backup"]
+                $nyfix01drdate8 = $variables["LastWriteTime8-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder8 = $variables["Folder8-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion9 = $variables["Version9-AWS_NYFIX01_Backup"]
+                $nyfix01drdate9 = $variables["LastWriteTime9-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder9 = $variables["Folder9-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion10 = $variables["Version10-AWS_NYFIX01_Backup"]
+                $nyfix01drdate10 = $variables["LastWriteTime10-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder10 = $variables["Folder10-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion11 = $variables["Version11-AWS_NYFIX01_Backup"]
+                $nyfix01drdate11 = $variables["LastWriteTime11-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder11 = $variables["Folder11-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion12 = $variables["Version12-AWS_NYFIX01_Backup"]
+                $nyfix01drdate12 = $variables["LastWriteTime12-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder12 = $variables["Folder12-AWS_NYFIX01_Backup"]
+                
+                
+                $nyfix01drversion13 = $variables["Version13-AWS_NYFIX01_Backup"]
+                $nyfix01drdate13 = $variables["LastWriteTime13-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder13 = $variables["Folder13-AWS_NYFIX01_Backup"]
+                
+                $nyfix01drversion14 = $variables["Version14-AWS_NYFIX01_Backup"]
+                $nyfix01drdate14 = $variables["LastWriteTime14-AWS_NYFIX01_Backup"]
+                $nyfix01drfolder14 = $variables["Folder14-AWS_NYFIX01_Backup"]
+                
+                
+                $fixvictoryversion = $variables["Version1-FIX_Victory"]
+                $fixvictorydate = $variables["LastWriteTime1-FIX_Victory"]
+                $fixvictoryfolder = $variables["Folder1-FIX_Victory"]
+                
+                $fixfrankfurtversion = $variables["Version1-Frankfurt"]
+                $fixfrankfurtdate = $variables["LastWriteTime1-Frankfurt"]
+                $fixfrankfurtfolder = $variables["Folder1-Frankfurt"]
+                
+                $fixOPUSversion = $variables["Version1-OPUS"]
+                $fixOPUSdate = $variables["LastWriteTime1-OPUS"]
+                $fixOPUSfolder = $variables["Folder1-OPUS"]
+                
+                $fixsao_pauloversion = $variables["Version1-Sao_Paulo"]
+                $fixsao_paulodate = $variables["LastWriteTime1-Sao_Paulo"]
+                $fixsao_paulofolder = $variables["Folder1-Sao_Paulo"]
+                
+                $fixsofiversion1 = $variables["Version1-Sofi_Prod_NV"]
+                $fixsofidate1 = $variables["LastWriteTime1-Sofi_Prod_NV"]
+                $fixsofifolder1 = $variables["Folder1-Sofi_Prod_NV"]
+                
+                $fixsofiversion2 = $variables["Version2-Sofi_Prod_NV"]
+                $fixsofidate2 = $variables["LastWriteTime2-Sofi_Prod_NV"]
+                $fixsofifolder2 = $variables["Folder2-Sofi_Prod_NV"]
+                
+                $fixStreet_Trader_Bahamasversion1 = $variables["Version2-Street_Trader_Bahamas"]
+                $fixStreet_Trader_Bahamasdate1 = $variables["LastWriteTime2-Street_Trader_Bahamas"]
+                $fixStreet_Trader_Bahamasfolder1 = $variables["Folder2-Street_Trader_Bahamas"]
+                
+                $fixStreet_Trader_Bahamasversion2 = $variables["Version2-Street_Trader_Bahamas"]
+                $fixStreet_Trader_Bahamasdate2 = $variables["LastWriteTime2-Street_Trader_Bahamas"]
+                $fixStreet_Trader_Bahamasfolder2 = $variables["Folder2-Street_Trader_Bahamas"]
+                
+
+
+                
+                
+                $htmlContent = @"
+                <html>
+                  <head>
+                    <style>
+                      table {
+						border-collapse: collapse;
+						width: 70%;
+					  }
+					  
+					  th, td {
+						border: 1px solid #000;
+						padding: 3px;
+						text-align: left;
+					  }
+
+					  th {
+						background-color: #f2f2f2;
+					  }
+
+					  td.green {
+						background-color: lightgreen;
+					  }
+                    </style>
+                  </head>
+                  <body>
+                    <h1>FIXHUB Engine Version</h1>
+                    <table border="2">
+                      <tr>
+                        <th>FIXHUB Instance</th>
+                        <th>NY4 Primary</th>
+                        <th>Date</th>
+                        <th>NY4 Backup</th>
+                        <th>Date</th>
+                        <th>AWS DR</th>
+                        <th>Date</th>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder1}</td>
+                        <td>${nyfix01version1}</td>
+                        <td>${nyfix01date1}</td>
+                        <td>${nyfix01backupversion1}</td>
+                        <td>${nyfix01backupdate1}</td>
+                        <td>${nyfix01drversion1}</td>
+                        <td>${nyfix01drdate1}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder2}</td>
+                        <td>${nyfix01version2}</td>
+                        <td>${nyfix01date2}</td>
+                        <td>${nyfix01backupversion2}</td>
+                        <td>${nyfix01backupdate2}</td>
+                        <td>${nyfix01drversion2}</td>
+                        <td>${nyfix01drdate2}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder3}</td>
+                        <td>${nyfix01version3}</td>
+                        <td>${nyfix01date3}</td>
+                        <td>${nyfix01backupversion3}</td>
+                        <td>${nyfix01backupdate3}</td>
+                        <td>${nyfix01drversion3}</td>
+                        <td>${nyfix01drdate3}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder4}</td>
+                        <td>${nyfix01version4}</td>
+                        <td>${nyfix01date4}</td>
+                        <td>${nyfix01backupversion4}</td>
+                        <td>${nyfix01backupdate4}</td>
+                        <td>${nyfix01drversion4}</td>
+                        <td>${nyfix01drdate4}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder5}</td>
+                        <td>${nyfix01version5}</td>
+                        <td>${nyfix01date5}</td>
+                        <td>${nyfix01backupversion5}</td>
+                        <td>${nyfix01backupdate5}</td>
+                        <td>${nyfix01drversion5}</td>
+                        <td>${nyfix01drdate5}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder6}</td>
+                        <td>${nyfix01version6}</td>
+                        <td>${nyfix01date6}</td>
+                        <td>${nyfix01backupversion6}</td>
+                        <td>${nyfix01backupdate6}</td>
+                        <td>${nyfix01drversion6}</td>
+                        <td>${nyfix01drdate6}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder7}</td>
+                        <td>${nyfix01version7}</td>
+                        <td>${nyfix01date7}</td>
+                        <td>${nyfix01backupversion7}</td>
+                        <td>${nyfix01backupdate7}</td>
+                        <td>${nyfix01drversion7}</td>
+                        <td>${nyfix01drdate7}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder8}</td>
+                        <td>${nyfix01version8}</td>
+                        <td>${nyfix01date8}</td>
+                        <td>${nyfix01backupversion8}</td>
+                        <td>${nyfix01backupdate8}</td>
+                        <td>${nyfix01drversion8}</td>
+                        <td>${nyfix01drdate8}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder9}</td>
+                        <td>${nyfix01version9}</td>
+                        <td>${nyfix01date9}</td>
+                        <td>${nyfix01backupversion9}</td>
+                        <td>${nyfix01backupdate9}</td>
+                        <td>${nyfix01drversion9}</td>
+                        <td>${nyfix01drdate9}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder10}</td>
+                        <td>${nyfix01version10}</td>
+                        <td>${nyfix01date10}</td>
+                        <td>${nyfix01backupversion10}</td>
+                        <td>${nyfix01backupdate10}</td>
+                        <td>${nyfix01drversion10}</td>
+                        <td>${nyfix01drdate10}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder11}</td>
+                        <td>${nyfix01version11}</td>
+                        <td>${nyfix01date11}</td>
+                        <td>${nyfix01backupversion11}</td>
+                        <td>${nyfix01backupdate11}</td>
+                        <td>${nyfix01drversion11}</td>
+                        <td>${nyfix01drdate11}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder12}</td>
+                        <td>${nyfix01version12}</td>
+                        <td>${nyfix01date12}</td>
+                        <td>${nyfix01backupversion12}</td>
+                        <td>${nyfix01backupdate12}</td>
+                        <td>${nyfix01drversion12}</td>
+                        <td>${nyfix01drdate12}</td>
+                      </tr>
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder13}</td>
+                        <td>${nyfix01version13}</td>
+                        <td>${nyfix01date13}</td>
+                        <td>${nyfix01backupversion13}</td>
+                        <td>${nyfix01backupdate13}</td>
+                        <td>${nyfix01drversion13}</td>
+                        <td>${nyfix01drdate13}</td>
+                      </tr>
+                      
+                      <tr>
+                        <td>NYFIX01-${nyfix01folder14}</td>
+                        <td>${nyfix01version14}</td>
+                        <td>${nyfix01date14}</td>
+                        <td>${nyfix01backupversion14}</td>
+                        <td>${nyfix01backupdate14}</td>
+                        <td>${nyfix01drversion14}</td>
+                        <td>${nyfix01drdate14}</td>
+                      </tr>
+                      
+                      
+                      <tr>
+                        <td>VICTORY-${fixvictoryfolder}</td>
+                        <td>${fixvictoryversion}</td>
+                        <td>${fixvictorydate}</td>
+                      </tr>
+                      
+                      <tr>
+                        <td>Frankfurt-${fixfrankfurtfolder}</td>
+                        <td>${fixfrankfurtversion}</td>
+                        <td>${fixfrankfurtdate}</td>
+                      </tr>
+                      
+                      <tr>
+                        <td>OPUS-${fixOPUSfolder}</td>
+                        <td>${fixOPUSversion}</td>
+                        <td>${fixOPUSdate}</td>
+                      </tr>
+                      
+                      <tr>
+                        <td>SOFI1-${fixsofifolder1}</td>
+                        <td>${fixsofiversion1}</td>
+                        <td>${fixsofidate1}</td>
+                      </tr>
+                      
+                      <tr>
+                        <td>SOFI2-${fixsofifolder2}</td>
+                        <td>${fixsofiversion2}</td>
+                        <td>${fixsofidate2}</td>
+                      </tr>
+                      
+                    <tr>
+                        <td>Eduardo1-${fixStreet_Trader_Bahamasfolder1}</td>
+                        <td>${fixStreet_Trader_Bahamasversion1}</td>
+                        <td>${fixStreet_Trader_Bahamasdate1}</td>
+                    </tr>
+                      
+                    <tr>
+                        <td>Eduardo2-${fixStreet_Trader_Bahamasfolder2}</td>
+                        <td>${fixStreet_Trader_Bahamasversion2}</td>
+                        <td>${fixStreet_Trader_Bahamasdate2}</td>
+                      </tr>  
+                      
+                    </table>
+                  </body>
+                </html>
+"@
+
+$htmlContent | Out-File -FilePath "${env:WORKSPACE}\\report.html"
+
+
+                '''
+                
+                    
+                    
+     
+                }
+                
+        
+              }
+            }	        
+    
+          
+            
+            
+        stage('Highlight version') {
+            steps {
+                powershell '''
+
+
+# Define the specific version you want to match
+$specificVersion = "${env:version}"
+
+
+# Read the HTML content from a text file
+$htmlContent = Get-Content -Path "report.html" -Raw
+
+# Remove line breaks within <td> elements
+$htmlContent = $htmlContent -replace '(<td>.*?)\\r?\\n\\s*(.*?)</td>', '$1 $2</td>'
+
+# Define the specific version you want to match
+
+# Use regex to add a class to specific version cells
+$pattern = "<td>\\s*$specificVersion\\s*</td>"
+$replacement = "<td class='green'>$specificVersion</td>"
+$htmlContent = $htmlContent -replace $pattern, $replacement
+
+# Use regex to check if all values in a row are the same and make the entire <tr> green
+$htmlContent = $htmlContent -replace "<tr>(?:<td>\\s*($specificVersion)\\s*</td>\\s*)+</tr>", {
+    param($match)
+    if ($match.Groups[1].Value -eq $specificVersion) {
+        "<tr class='green'>$match</tr>"
+    } else {
+        "<tr>$match</tr>"
+    }
+}
+
+# Write the modified HTML content back to an HTML file
+$htmlContent | Set-Content -Path "report.html" -Force
+
+                '''
+            }
+        }   
+        
+        
+     
+        
+        stage('Email')    {
+                    steps {
+                    script {
+                    emailext (
+                        
+                        
+                        mimeType: 'text/html',
+                        attachLog: true,
+                        subject: "FIXHUB Versions Comparision'${env.JOB_NAME}'",
+                        body: readFile("${env.WORKSPACE}/report.html"),
+                        to: "muhammad.faraz@logicielservice.com,fahad.haroon@logicielservice.com,tradingops@logicielservice.com,devops@logicielservice.com",
+                        from: 'logiciel.subscriptions@logicielservice.com',
+                        recipientProviders: [[$class: 'CulpritsRecipientProvider'],[$class: 'DevelopersRecipientProvider']])
+                    }
+                    }                
+                
+                }
+        
+        
+        
+
+    
+
+    
+      stage('Publish Html Files') {
+          steps {
+            script {
+           
+          publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '', reportFiles: '*.txt,*.html', reportName: 'HTML Report', reportTitles: '', useWrapperFileDirectly: true])
+                  
+                }
+                
+        
+              }
+            }
+        
+    }
+}

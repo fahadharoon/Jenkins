@@ -1,0 +1,33 @@
+# Access the environment variable set in the batch build step
+$BASE_PATHS = [Environment]::GetEnvironmentVariable("CONCATENATED_VALUE", "Machine")
+Write-Host "The concatenated value for ${env:label} is: $BASE_PATHS"
+
+$FilePaths = @()  # Initialize an empty array to store file paths
+$OutputFilePath = "${env:label}.txt"
+
+$FileList = $BASE_PATHS -split ','
+
+Write-Host "File Path $FileList"
+
+foreach ($FilePath in $FileList) {
+    try {
+        $FolderName = (Split-Path -Path (Split-Path -Path $FilePath -Parent) -Leaf)
+        $fileItem = Get-Item $FilePath
+
+        if ($fileItem -is [System.IO.FileInfo]) {
+            $FileInfo = $fileItem | Select-Object Name, @{Name="Version"; Expression={$_.VersionInfo.FileVersion}}, @{Name="ProductVersion"; Expression={$_.VersionInfo.ProductVersion}}, @{Name="LastWriteTime"; Expression={$_.LastWriteTime.ToString('dd-MMM-yy')}}, @{Name="Folder"; Expression={$FolderName}}
+            $FilePaths += $FilePath  # Add the file path to the array
+            $FileInfo | Format-List | Out-File -Append $OutputFilePath
+        } else {
+            Write-Host "Not a file: $FilePath"
+        }
+    } catch {
+        Write-Host "Error processing file: $FilePath"
+    }
+}
+
+# $FilePaths array now contains the file paths
+
+
+type "$OutputFilePath"
+# $FilePaths array now contains the file paths
