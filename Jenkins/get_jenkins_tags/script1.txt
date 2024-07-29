@@ -1,0 +1,4 @@
+def gettags = ("git ls-remote -t -h https://gituser:gitpat@github.com/organization/repo.git").execute()
+return gettags.text.readLines().collect { 
+  it.split()[1].replaceAll('refs/heads/', '').replaceAll('refs/tags/', '').replaceAll("\\^\\{\\}", '')
+}

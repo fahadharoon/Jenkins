@@ -1,0 +1,14 @@
+versionPattern = ~/v\d+\.\d+\.\d+/
+def gettags = ("git ls-remote -t https://gituser:gitpat@github.com/organization/repo.git").execute()
+
+def alltags = gettags.text.readLines().collect {
+  it.split()[1].replaceAll('refs/heads/', '').replaceAll('refs/tags/', '').replaceAll("\\^\\{\\}", '')
+}.sort( false ) { a, b ->
+    a = a.find(versionPattern) ? a.find(versionPattern).replaceAll('v', '') : '0'
+    b = b.find(versionPattern) ? b.find(versionPattern).replaceAll('v', '') : '0'
+    return [a,b]*.tokenize('.')*.collect { it as int }.with { u, v ->
+      [u,v].transpose().findResult{ x,y-> y<=>x ?: null } ?: v.size() <=> u.size()
+    }
+  }
+
+return alltags
