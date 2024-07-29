@@ -1,3 +1,17 @@
+#Batch Script Section
+
+@echo off
+setlocal enabledelayedexpansion
+
+set BASE_PATH_=BASE_PATH_
+set label=%label%
+set concatenatedVariableName=!BASE_PATH_!!label!
+setx CONCATENATED_VALUE "!%concatenatedVariableName%!" /M
+
+endlocal
+
+#################################################################################
+
 # Retrieve the concatenated value from the environment variable
 $BASE_PATHS = [Environment]::GetEnvironmentVariable("CONCATENATED_VALUE", "Machine")
 
@@ -13,7 +27,7 @@ if (-not [string]::IsNullOrWhiteSpace($BASE_PATHS)) {
     $formattedString = $BASE_PATHS -join ', '
 
     Write-Host "The concatenated value for ${env:label} is: $formattedString"
-  
+    
   
   Write-Host "$formattedString"
 
@@ -28,35 +42,41 @@ if (-not [string]::IsNullOrWhiteSpace($BASE_PATHS)) {
 
 
 
-# Get services with their descriptions
-#$keywords = @("Apache", "OMSServer")
-#$services = Get-Service | ForEach-Object {
-#    $service = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.ServiceName)"
-#    [PSCustomObject]@{
-#        DisplayName = $_.DisplayName
-#        Description = $service.Description
-#        Status = $_.Status
-#    }
-#}
+# Define an array of executable file names
+$executableFileNames = @(
+    "OrderExecServer.exe",
+    "FIXHub.exe",
+  	"FIXEngine.exe",
+    "Apache.Ignite.Executable.exe*",
+    "QueryServer.exe",
+    "DataAccessServer.exe",
+  	"ACT Reporting Server.exe",
+    "OMSConfiguratorServiceHost.exe"
+)
 
-$services = Get-Service | ForEach-Object {
-    $serviceInfo = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.ServiceName)"
+# Get all services with their executable paths
+$servicesWithPaths = Get-WmiObject Win32_Service | Select-Object DisplayName, Description, State, PathName, StartMode
 
-    $description = if ($serviceInfo.PSObject.Properties.Name -contains 'Description') {
-        $serviceInfo.Description
-    } else {
-        $_.DisplayName
+# Filter services based on executable paths
+$filteredServices = $servicesWithPaths | Where-Object {
+    $path = $_.PathName.Trim('"') # Remove leading and trailing quotes for comparison
+    foreach ($executableFileName in $executableFileNames) {
+        if ($path -like "*\$executableFileName") {
+            return $true
+        }
     }
-
-    [PSCustomObject]@{
-        DisplayName = $_.DisplayName
-        Description = $description
-        Status = $_.Status
-    }
+    return $false
 }
 
-# Filter services containing "Apache" in the description
-$filteredServices = $services | Where-Object { $_.Description -like '*Apache*' -or $_.description -like "*OMSServer*" -or $_.description -like "*vtrader*" -or $_.description -like "*das-*" -or $_.description -like "*fix *" -or $_.description -like "*fix-*" -or $_.description -like "*FIXVC*" -or $_.description -like "*das*" -or $_.description -like "*OEx64VC14-VITA*" -or $_.description -like "*OrderExecServer Service*"  -or $_.description -like "*OrderExec Server Service*" -or $_.description -like "*Logiciel *" -or $_.description -like "*OMSConfigurator*" -or $_.description -like "*ACTReportingServer*" -or $_.description -like "*AuditTrailUpdateServer-Frankfurt*" -or $_.description -like "*FIXVC14-Outbound*" -or $_.description -like "*vTraderEngineVC17*" }
+$filteredServices | ForEach-Object {
+    if ($_.State -eq "Stopped" -and $_.StartMode -eq "Disabled") {
+        $_.State = "Disabled"
+    }
+    if ($_.State -eq "StopPending") {
+        $_.State = "Stopping"
+    }
+    $_
+} | Select-Object DisplayName, Description, State
 
 # Names to exclude from the output
 $namesToExclude = @($formattedString)
@@ -68,9 +88,77 @@ $namesToExclude = $formattedString
 
 # Exclude specific rows based on names
 
-$filteredServices = $filteredServices | Where-Object { $formattedString -notlike "*$($_.DisplayName)*" }
+#$filteredServices = $filteredServices | Where-Object { $formattedString -notlike "*$($_.DisplayName)*" }
 
-$filteredServices = $filteredServices | Where-Object { ($formattedString -notlike "*$($_.DisplayName)*") -and ($_.DisplayName -ne "UpdateServer_CorpAct") -and ($_.DisplayName -ne "UpdateServerCORPACT") -and ($_.DisplayName -ne "OMSServer64") -and ($_.DisplayName -ne "OMSServer64-BANFF") -and ($_.DisplayName -ne "OMSServer64-ONT") -and ($_.DisplayName -ne "FIXVC14-APP01") -and ($_.DisplayName -ne "FIXVC14-Outbound01" ) }
+#$filteredServices = $filteredServices | Where-Object { ($formattedString -notlike "*$($_.DisplayName)*") -and ($_.DisplayName -ne "UpdateServer_CorpAct") -and ($_.DisplayName -ne "UpdateServerCORPACT") -and ($_.DisplayName -ne "OMSServer64") -and ($_.DisplayName -ne "OMSServer64-BANFF") -and ($_.DisplayName -ne "OMSServer64-ONT") -and ($_.DisplayName -ne "FIXVC14-APP01") -and ($_.DisplayName -ne "FIXVC14-Outbound01") -and ($_.DisplayName -ne "LocateServer-Frankfurt") -and ($_.DisplayName -ne "vTraderEngineVC17-NEW")}
+
+#$filteredServices = $filteredServices | Where-Object { 
+#    ($formattedString -notlike "$($_.Description)") -and 
+#    ($excludeDisplayNames -notcontains $_.DisplayName)
+#}
+
+Write-Host "Formatted String: $($formattedString)"
+
+
+
+$formattedString | Out-File -FilePath "${env:label}.txt"
+# Read the content of the file into an array
+$lines = Get-Content -Path "${env:label}.txt"
+
+# Remove double quotes from each line
+$linesWithoutQuotes = $lines -replace '"'
+
+# Write the modified content back to the file
+$linesWithoutQuotes | Out-File -FilePath "${env:label}.txt" -Force
+
+
+
+
+# Read the content of the file into the variable $namesToExclude
+$namesToExclude = Get-Content -Path "${env:label}.txt"
+
+# Output the content of the variable
+Write-Host "Content of \$namesToExclude variable:"
+Write-Host $namesToExclude
+
+# Split the string of names to exclude into an array
+$namesToExclude = "$namesToExclude" -split ', '
+
+
+
+# Filter $filteredServices based on $namesToExclude
+#$filteredServices = $filteredServices | Where-Object { $namesToExclude -notcontains $_.DisplayName }
+
+
+# Filter services based on excluded names and remove disabled services
+#$filteredServices = $filteredServices | Where-Object { $_.DisplayName -notin $namesToExclude -and $_.StartMode -ne "Disabled" }
+#$filteredServices = $filteredServices | Where-Object { $_.DisplayName -notin $formattedString }
+
+#$filteredServices = $filteredServices | Where-Object { $_.DisplayName -notin $namesToExclude}
+
+#$filteredServices = $filteredServices | Where-Object { $_.DisplayName -notin "$namesToExclude"}  | Out-File -FilePath "output.txt"
+
+# Split the variable $namesToExclude into an array of values
+$namesToExcludeArray = $namesToExclude -split ','
+
+# Iterate over each value in $namesToExcludeArray and filter $filteredServices
+foreach ($name in $namesToExcludeArray) {
+  Write-Host "$name"
+    $filteredServices = $filteredServices | Where-Object { $_.DisplayName -ne $name }
+}
+
+# Output the filtered services to a text file
+$filteredServices | Out-File -FilePath "output.txt"
+
+
+
+
+#$filteredServices = $filteredServices | Where-Object { 
+#    ($formattedString -notlike "*$($_.DisplayName)*") -and 
+#    ($excludeDisplayNames -notcontains $_.DisplayName)
+#}
+
+
 
 
 
@@ -100,7 +188,7 @@ $htmlHeader = @"
         }
 
         .mainBox {
-            width: 80%;
+            width: 100%;
             background: #ffffff;
             border-radius: 12px;
             overflow: hidden;
@@ -121,7 +209,7 @@ $htmlHeader = @"
         }
 
         table {
-            width: 70%;
+            width: 100%;
             border-collapse: collapse;
             margin-top: 0px;
         }
@@ -169,7 +257,7 @@ $htmlHeader = @"
             <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Display Name</th>
             <th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Description</th>
 			<th style="background-color:#EEEEEE; color:Black; width:10%; height:20px">Status</th>
-    </tr>
+    	</tr>
 "@
 
 # HTML footer
@@ -187,7 +275,7 @@ $htmlFooter = @"
 $htmlServices = $filteredServices | ForEach-Object {
     $displayName = $_.DisplayName
     $description = $_.Description
-    $status = $_.Status
+    $status = $_.State
 
     # Check for null or empty description
     if ([string]::IsNullOrWhiteSpace($description)) {
@@ -195,7 +283,8 @@ $htmlServices = $filteredServices | ForEach-Object {
     }
 
     # Determine the class for styling based on the service status
-    $statusClass = if ($status -eq 'Running') { 'green' } else { 'red' }
+    $statusClass = if ($status -eq 'Running') { 'green' } elseif ($status -eq 'Disabled') { 'grey' } else { 'red' }
+
 
     "<tr><td><b>${env:label}</b></td><td>$displayName</td><td>$description</td><td class='$statusClass'>$status</td></tr>"
   
