@@ -1,0 +1,32 @@
+Install Java
+sudo yum install java-11-openjdk-devel
+
+Create jenkins folder in linux machine
+mkdir /root/JENKIN_AGENT/
+
+cd /root/JENKIN_AGENT/
+
+download agent.jar file in this folder
+
+create file in path /etc/systemd/system naming feedserver_jenkins_agent.service and put below content there
+[Unit]
+Description=JenkinsSlave
+
+ 
+
+[Service]
+User=root
+WorkingDirectory=/root/JENKIN_AGENT
+ExecStart=/bin/bash /root/JENKIN_AGENT/slaveStart.sh
+Restart=always
+
+ 
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+vi /root/JENKIN_AGENT/slaveStart.sh
+java -jar agent.jar -jnlpUrl http://35.222.65.105:8080/computer/DevOps%5FLinux/jenkins-agent.jnlp -secret 4b10ee98d854ace15886b92458d0a4e8394c1d3488483313bf6528f2faa461f7 -workDir "/root/JENKIN_AGENT/"
