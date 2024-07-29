@@ -1,0 +1,124 @@
+pipeline {
+    agent { label 'agentname' }
+    
+    environment {
+        currentDate = new Date().format('yyyy-MM-dd')
+        backupDir = "$backupDir/$JOB_BASE_NAME/${currentDate}/${BUILD_ID}"
+        backupDirConfig = "$backupDir/$JOB_BASE_NAME/${currentDate}_config/${BUILD_ID}"
+        AWS_CREDENTIALS_ID = 'CD_Bucket'
+        S3_BUCKET = 'bucketname'
+        RELEASE_PATH = 's3path'
+        REGION = 'us-east-1'
+        AWS_ACCESS_KEY="access_key"
+        AWS_SECRET_KEY="secret"
+        
+        PROD_CREDS = credentials('cred')
+
+        def password = "${PROD_CREDS_PSW}"
+        def username = "user"
+        def hostname = "IP"
+        def artifactpath = "artifactpath"
+        def configpath = "configpath"
+
+    }
+
+    stages {
+        
+          stage('List S3 Objects') {
+            steps {
+                script {
+                    withAWS(credentials: AWS_CREDENTIALS_ID, region: REGION) {
+                        // List objects in the S3 bucket and store in a variable
+                        def s3Objects = s3FindFiles(bucket: S3_BUCKET, path: RELEASE_PATH)
+                        def objectNames = s3Objects.collect { it.getName() }
+                        echo "Available S3 Objects:\n${objectNames.join('\n')}"
+
+                        // Display options for user selection
+                        echo "Select an object from the list: ${objectNames}"
+                        
+                        // Prompt user to select an object
+                        def selectedObject = input message: 'Select S3 Object to Deploy', ok: 'Deploy', parameters: [choice(name: 'OBJECT', choices: objectNames.join('\n'), description: 'Choose an S3 object')]
+
+                        // Set selected object as an environment variable
+                        env.SELECTED_OBJECT = selectedObject
+                    }
+                }
+            }
+        } 
+        
+        stage('Clean Artifact Application') {
+            steps {
+                script {
+                    def scriptContent = """
+                        rm -rf $artifactpath
+                        mkdir -p $artifactpath
+                        """
+
+                    sh "sshpass -p '${password}' ssh -o 'StrictHostKeyChecking no' ${username}@${hostname} 'bash -s' <<'EOF'\n${scriptContent}\nEOF"
+
+                }
+            }
+        }
+        
+        stage('Download Selected Application from S3') {
+            steps {
+                script {
+                    withAWS(credentials: AWS_CREDENTIALS_ID, region: REGION) {
+                        echo "Deploying object: ${env.SELECTED_OBJECT}"
+
+                        // Download the selected object
+                        s3Download(file: "${env.WORKSPACE}/${env.SELECTED_OBJECT}", bucket: S3_BUCKET, path: "${env.RELEASE_PATH}/${env.SELECTED_OBJECT}", force:true)
+
+                     sh """
+                        sshpass -p '${password}' scp -o 'StrictHostKeyChecking no' ${env.WORKSPACE}/${env.SELECTED_OBJECT} ${username}@${hostname}:'${artifactpath}'
+                        """
+                    }
+                }
+            }
+        }
+        
+        
+ 
+        stage('BackUp Application') {
+            steps {
+                script {
+                    // def scriptContent = """
+                    //     mkdir -p ${backupDir}
+                    //     rsync -av --exclude='*.log' $depPath/ ${backupDir}/
+                    //     """
+                    def scriptContent = """
+                        mkdir -p ${backupDir}
+                        cd $depPath
+                        cp -r `ls -A | grep -v "logs"` ${backupDir}/ -v
+                        """
+
+                    sh "sshpass -p '${password}' ssh -o 'StrictHostKeyChecking no' ${username}@${hostname} 'bash -s' <<'EOF'\n${scriptContent}\nEOF"
+
+                }
+            }
+        }
+        
+        stage('Deploy Selected Application Service') {
+            steps {
+                script {
+                    def scriptContent = """
+                        cd ${artifactpath}
+                        ls -ltr
+                        tar -xvf ${artifactpath}/${env.SELECTED_OBJECT} && rm ${env.SELECTED_OBJECT}
+                        ls -ltr
+                        cp -r $artifactpath/* $depPath
+                        cd $depPath
+                        ls -ltr
+                        export LD_LIBRARY_PATH=./lib/
+                        """
+
+                    sh "sshpass -p '${password}' ssh -o 'StrictHostKeyChecking no' ${username}@${hostname} 'bash -s' <<'EOF'\n${scriptContent}\nEOF"
+
+                }
+            }
+        }
+        
+
+    }
+}
+
