@@ -1,0 +1,344 @@
+pipeline {
+  agent { label "Fahad_A1" }
+
+    
+    environment {
+        DEPLOYMENT_PATH = ""
+        APPLICATION_POOL = ''
+        DEPLOYMENT_REPOSITORY = ''
+        TAG_NAME = ''
+        FolderNameDate = new Date().format("yyyy-MM-dd")
+    }
+    
+    stages {
+        stage('Clean Workspace'){
+            steps{
+                cleanWs()
+            } 
+        }
+        
+    stage('Get Selected Values') {
+        steps {
+            script {
+                echo "Selected Project: ${params.Select_Project}"
+                echo "Project Parameters: ${params.Project_Params}"
+                
+                // Split the Project_Params into a list
+                def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                
+                echo "Split values: ${inputParams}"
+                
+                // Ensure there are enough parameters in the list
+                if (inputParams.size() >= 4) {
+                    // Assign values to environment variables with uppercase names
+                    def deploymentPath = inputParams[0].replaceAll('\\\\\\\\', '\\\\')
+                    def deploymentRepository = inputParams[1]
+                    def tagName = inputParams[2]
+                    def applicationPool = inputParams[3]
+                    
+                    // Print the assigned values for debugging
+                    echo "Deployment Path: ${deploymentPath}"
+                    echo "Deployment Repository: ${deploymentRepository}"
+                    echo "Tag Name: ${tagName}"
+                    echo "Application Pool: ${applicationPool}"
+                    
+                    // Set environment variables (Note: These are local to the script block)
+                    env.DEPLOYMENT_PATH = deploymentPath
+                    env.DEPLOYMENT_REPOSITORY = deploymentRepository
+                    env.TAG_NAME = tagName
+                    env.APPLICATION_POOL = applicationPool
+                } else {
+                    error "Not enough parameters provided in Project_Params"
+                }
+            }
+        }
+    }
+
+
+        stage('Print Selected Projects and Parameters') {
+            steps {
+                script {
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        def deploymentPath = inputParams[0].replaceAll('\\\\\\\\', '\\\\')
+                        def deploymentRepository = inputParams[1]
+                        def tagName = inputParams[2]
+                        def applicationPool = inputParams[3]
+                        
+                        // Print the selected projects and parameters
+                        echo "Selected Projects: ${inputParams}"
+                        echo "Deployment Path: ${deploymentPath}"
+                        echo "Deployment Repository: ${deploymentRepository}"
+                        echo "Tag Name: ${tagName}"
+                        echo "Application Pool: ${applicationPool}"
+                        
+                        // Optionally, process each selected project
+                        inputParams.each { project ->
+                            echo "Processing project: ${project}"
+                            // Add your logic here to handle each selected project
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+
+        
+        
+
+
+stage('SCM checkout') {
+            steps {
+                script {
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                            
+                            // Clone the repository using git clone command
+                            bat """
+                                git clone --depth 1 --branch ${tagName} https://$gitUser:$gitPat@github.com/$gitRepo/${deploymentRepository}.git ${applicationPool}
+                            """
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+
+
+
+        
+        
+        stage('Take Backup') {
+            steps {
+                script{
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                    bat """
+                        :: @echo off
+                        :: Get the current directory
+                        set "currentDir=${deploymentPath}"
+                        
+                        :: Get the parent directory
+                        set "parentDir=%currentDir%\\.."
+                        
+                        :: Resolve the full path of the parent directory
+                        for %%I in ("%parentDir%") do set "parentDir=%%~fI"
+                        
+                        :: Set the backup directory
+                        set "backupDir=%parentDir%\\Backup"
+                        
+                        :: Create the backup directory if it does not exist
+                        if not exist "%backupDir%" (
+                            mkdir "%backupDir%"
+                        )
+                        
+                        :: Copy all contents of the current directory to the backup directory
+                        xcopy "%currentDir%\\*" "%backupDir%\\${applicationPool}\\${env:FolderNameDate}" /E /H /C /I /Y
+                        
+                        echo Backup completed successfully.
+                        """
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+        
+        
+        
+        
+        
+        stage('Stop IIS AppPool') {
+            steps {
+                script{
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                bat """@echo off
+                "C:\\Windows\\System32\\inetsrv\\appcmd.exe" list apppool "${applicationPool}" | Find "Started"
+                if "%ERRORLEVEL%"=="0" (
+                "C:\\Windows\\System32\\inetsrv\\appcmd.exe" stop apppool /apppool.name:"${applicationPool}"
+                ) else (
+                    echo Pool is not running
+                )
+                exit 0"""
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+        
+        
+        
+        stage('Copy Files') {
+            steps {
+                script{
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                bat """XCOPY "%WORKSPACE%/${applicationPool}" "${deploymentPath}" /E/H/C/I/Y"""
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+    
+
+    
+        stage('Delete .git folder') {
+            steps {
+                script{
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                bat """rmdir "${deploymentPath}\\.git" /s /q"""
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+        stage('Start IIS AppPool') {
+            steps {
+                script{
+                    // Split Project_Params and trim each value
+                    def inputParams = params.Project_Params.split(',').collect { it.trim() }
+                    
+                    // Ensure there are enough parameters in the list
+                    if (inputParams.size() >= 4) {
+                        // Split the inputParams into groups of 4
+                        def projects = inputParams.collate(4)
+                        
+                        // Iterate over each group of 4 parameters
+                        projects.each { projectParams ->
+                            def deploymentPath = projectParams[0].replaceAll('\\\\\\\\', '\\\\')
+                            def deploymentRepository = projectParams[1]
+                            def tagName = projectParams[2]
+                            def applicationPool = projectParams[3]
+                            
+                            // Print the selected projects and parameters
+                            echo "Selected Project: ${projectParams}"
+                            echo "Deployment Path: ${deploymentPath}"
+                            echo "Deployment Repository: ${deploymentRepository}"
+                            echo "Tag Name: ${tagName}"
+                            echo "Application Pool: ${applicationPool}"
+                bat """@echo off
+                "C:\\Windows\\System32\\inetsrv\\appcmd.exe" list apppool "${applicationPool}" | Find "Stopped"
+                if "%ERRORLEVEL%"=="0" (
+                "C:\\Windows\\System32\\inetsrv\\appcmd.exe" start apppool /apppool.name:"${applicationPool}"
+                ) else (
+                    echo Pool is not running
+                )
+                exit 0"""
+                        }
+                    } else {
+                        error "Not enough parameters provided in Project_Params"
+                    }
+                }
+            }
+        }
+     }
+}
