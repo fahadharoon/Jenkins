@@ -1,4 +1,0 @@
-1) The variable name used for ActiveChoicesParameter is Select_Project
-2) The variable name used for ActiveChoicesReactiveReferenceParameter is Project_Params
-3) We need to reference ActiveChoicesParameter->Select_Project variable in ActiveChoicesReactiveReferenceParameter
-4) Choice Type for ActiveChoicesReactiveReferenceParameter will be Formatted HTML
